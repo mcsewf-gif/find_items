@@ -9,8 +9,11 @@
   <meta name="theme-color" content="#4f46e5">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="apple-mobile-web-app-title" content="寻物小助手">
-  <link rel="apple-touch-icon" href="https://cdn-icons-png.flaticon.com/512/833/833300.png">
+  <meta name="apple-mobile-web-app-title" content="寻物">
+  
+  <!-- 嵌入式内联 Base64 图标，解决 iOS/Android 桌面图标显示为黑块的问题 -->
+  <link rel="apple-touch-icon" id="apple-icon" href="">
+  <link rel="icon" type="image/svg+xml" id="favicon" href="">
   
   <!-- Manifest Dynamic Injection -->
   <link id="manifest-placeholder" rel="manifest">
@@ -127,7 +130,31 @@
   </div>
 
   <script>
-    // --- 1. Dynamic Manifest & Service Worker Setup for PWA ---
+    // --- 1. Dynamic Icon & Manifest Setup (Fixes Black Screen Icon Bug on iOS/Android) ---
+    // 高清 SVG 格式的图标，采用渐变紫色背景 + 白色箱子/放大镜图标
+    const appIconSvg = `
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+        <defs>
+          <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stop-color="#6366f1"/>
+            <stop offset="100%" stop-color="#4338ca"/>
+          </linearGradient>
+        </defs>
+        <rect width="512" height="512" rx="115" fill="url(#bgGrad)"/>
+        <g transform="translate(96, 96) scale(0.625)" fill="#ffffff">
+          <path d="M256 0c-17.7 0-32 14.3-32 32v32H64C28.7 64 0 92.7 0 128v256c0 35.3 28.7 64 64 64h384c35.3 0 64-28.7 64-64V128c0-35.3-28.7-64-64-64H288V32c0-17.7-14.3-32-32-32zM128 160h256c8.8 0 16 7.2 16 16s-7.2 16-16 16H128c-8.8 0-16-7.2-16-16s7.2-16 16-16zm-32 96h128c8.8 0 16 7.2 16 16s-7.2 16-16 16H96c-8.8 0-16-7.2-16-16s7.2-16 16-16z"/>
+          <path d="M384 320c-35.3 0-64 28.7-64 64s28.7 64 64 64 64-28.7 64-64-28.7-64-64-64zm80 80c0 44.2-35.8 80-80 80s-80-35.8-80-80 35.8-80 80-80 80 35.8 80 80z"/>
+        </g>
+      </svg>
+    `.trim();
+
+    const iconDataUrl = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(appIconSvg);
+
+    // 设置页面与苹果桌面图标
+    document.getElementById('apple-icon').setAttribute('href', iconDataUrl);
+    document.getElementById('favicon').setAttribute('href', iconDataUrl);
+
+    // 设置 Web Manifest
     const manifestData = {
       "name": "寻物小助手",
       "short_name": "寻物",
@@ -137,9 +164,10 @@
       "theme_color": "#4f46e5",
       "icons": [
         {
-          "src": "https://cdn-icons-png.flaticon.com/512/833/833300.png",
+          "src": iconDataUrl,
           "sizes": "512x512",
-          "type": "image/png"
+          "type": "image/svg+xml",
+          "purpose": "any maskable"
         }
       ]
     };
@@ -147,20 +175,15 @@
     const manifestBlob = new Blob([JSON.stringify(manifestData)], { type: 'application/json' });
     document.getElementById('manifest-placeholder').setAttribute('href', URL.createObjectURL(manifestBlob));
 
+    // Service Worker 离线支持
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
         const swCode = `
-          const CACHE_NAME = 'item-tracker-v1';
-          self.addEventListener('install', e => {
-            e.waitUntil(self.skipWaiting());
-          });
-          self.addEventListener('activate', e => {
-            e.waitUntil(self.clients.claim());
-          });
+          const CACHE_NAME = 'item-tracker-v2';
+          self.addEventListener('install', e => e.waitUntil(self.skipWaiting()));
+          self.addEventListener('activate', e => e.waitUntil(self.clients.claim()));
           self.addEventListener('fetch', e => {
-            e.respondWith(
-              fetch(e.request).catch(() => caches.match(e.request))
-            );
+            e.respondWith(fetch(e.request).catch(() => caches.match(e.request)));
           });
         `;
         const blob = new Blob([swCode], { type: 'text/javascript' });
