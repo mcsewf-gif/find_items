@@ -2,494 +2,374 @@
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>家务打卡</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>寻物小助手 - 物品位置记录</title>
+  
+  <!-- PWA & Mobile Web App Meta -->
   <meta name="theme-color" content="#4f46e5">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <link rel="manifest" href="data:application/manifest+json,{%22name%22:%22家务打卡%22,%22short_name%22:%22家务%22,%22start_url%22:%22.%22,%22display%22:%22standalone%22,%22background_color%22:%22%23f3f4f6%22,%22theme_color%22:%22%234f46e5%22}">
+  <meta name="apple-mobile-web-app-title" content="寻物小助手">
+  <link rel="apple-touch-icon" href="https://cdn-icons-png.flaticon.com/512/833/833300.png">
+  
+  <!-- Manifest Dynamic Injection -->
+  <link id="manifest-placeholder" rel="manifest">
+
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  
+  <!-- FontAwesome Icons CDN -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  
+  <!-- SheetJS CDN (Excel Export) -->
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+
   <style>
-    :root { --primary: #4f46e5; --bg: #f3f4f6; --card: #ffffff; --text: #1f2937; }
-    * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
-    body { background: var(--bg); color: var(--text); padding-bottom: 30px; }
-    header { background: var(--primary); color: white; padding: 12px; text-align: center; position: sticky; top: 0; z-index: 10; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
-    header h1 { font-size: 18px; }
-    .nav { display: flex; justify-content: center; background: white; margin: 8px 12px; padding: 3px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
-    .nav button { flex: 1; padding: 6px; border: none; background: transparent; font-weight: bold; color: #6b7280; border-radius: 6px; cursor: pointer; font-size: 13px; }
-    .nav button.active { background: var(--primary); color: white; }
-    .container { padding: 0 12px; }
-    
-    /* 紧凑版卡片与拖拽样式 */
-    .card { 
-      background: var(--card); 
-      border-radius: 8px; 
-      padding: 8px 12px; 
-      margin-bottom: 6px; 
-      box-shadow: 0 1px 2px rgba(0,0,0,0.05); 
-      display: flex; 
-      justify-content: space-between; 
-      align-items: center; 
-      user-select: none; 
-      -webkit-user-select: none; 
-      transition: transform 0.15s ease, box-shadow 0.15s ease; 
-      touch-action: pan-y; 
+    /* Custom Scrollbar for list container */
+    ::-webkit-scrollbar {
+      width: 6px;
     }
-    .card.dragging { opacity: 0.4; transform: scale(0.98); border: 2px dashed var(--primary); }
-    
-    /* 拖拽手柄 */
-    .drag-handle { 
-      color: #9ca3af; 
-      padding: 4px 8px 4px 0; 
-      font-size: 16px; 
-      cursor: grab; 
-      display: flex; 
-      align-items: center; 
-      touch-action: none; 
+    ::-webkit-scrollbar-track {
+      background: #f1f5f9;
     }
-    .drag-handle:active { cursor: grabbing; }
-    
-    .task-main { display: flex; align-items: center; flex: 1; overflow: hidden; margin-right: 6px; }
-    
-    .task-info { flex: 1; min-width: 0; }
-    .task-info h3 { font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    
-    /* 第二行包含备注与状态警告 */
-    .sub-info { display: flex; align-items: center; gap: 6px; margin-top: 2px; }
-    
-    /* 备注标签样式 */
-    .task-note-badge { 
-      background: #e0e7ff; 
-      color: #4338ca; 
-      font-size: 10px; 
-      padding: 1px 5px; 
-      border-radius: 4px; 
-      font-weight: normal; 
-      white-space: nowrap;
-      display: inline-block;
+    ::-webkit-scrollbar-thumb {
+      background: #cbd5e1;
+      border-radius: 3px;
     }
-
-    .status.warning { font-size: 11px; color: #dc2626; font-weight: bold; }
-    
-    /* 操作按钮组 */
-    .actions { display: flex; align-items: center; gap: 3px; }
-    .btn-icon { background: transparent; border: none; font-size: 13px; cursor: pointer; padding: 3px; border-radius: 4px; opacity: 0.6; }
-    .btn-icon:active { opacity: 1; transform: scale(1.1); }
-    .btn-check { background: var(--primary); color: white; border: none; padding: 5px 10px; border-radius: 14px; font-weight: bold; cursor: pointer; font-size: 12px; margin-left: 2px; }
-    .btn-check:active { opacity: 0.8; }
-    
-    /* 视图样式 */
-    .calendar-grid { background: white; border-radius: 8px; padding: 10px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
-    .grid-header, .grid-row { display: grid; grid-template-columns: 80px repeat(7, 1fr); gap: 4px; text-align: center; font-size: 12px; align-items: center; }
-    .grid-header { font-weight: bold; padding-bottom: 6px; border-bottom: 1px solid #eee; margin-bottom: 6px; }
-    .grid-row { padding: 4px 0; border-bottom: 1px solid #f9f9f9; }
-    .task-name { text-align: left; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .dot { width: 12px; height: 12px; border-radius: 50%; margin: 0 auto; background: #e5e7eb; }
-    .dot.done { background: #10b981; }
-
-    /* 月视图等宽布局调整 */
-    .month-grid { 
-      display: grid; 
-      grid-template-columns: repeat(7, 1fr); 
-      gap: 4px; 
-      text-align: center; 
+    body {
+      -webkit-tap-highlight-color: transparent;
+      user-select: none;
     }
-    .month-day { 
-      padding: 6px 2px; 
-      font-size: 11px; 
-      border: 1px solid #eee; 
-      border-radius: 4px; 
-      min-height: 48px; 
-      background: #fafafa; 
-      min-width: 0; /* 允许子元素缩小，防止内容撑宽网格 */
-      overflow: hidden;
+    input, textarea {
+      user-select: text;
     }
-    .month-day.empty { 
-      background: #f3f4f6; 
-      border-color: transparent; 
-    }
-    .month-day .num { font-size: 10px; color: #9ca3af; margin-bottom: 2px; }
-    .month-tag { 
-      background: #10b981; 
-      color: white; 
-      font-size: 9px; 
-      padding: 1px 2px; 
-      border-radius: 2px; 
-      margin-top: 1px; 
-      overflow: hidden; 
-      white-space: nowrap; 
-      text-overflow: ellipsis; /* 文本超长时自动省略，保持单格等宽 */
-    }
-
-    .add-bar { display: flex; gap: 8px; margin-bottom: 8px; }
-    .add-bar input { flex: 1; padding: 6px 10px; border: 1px solid #ddd; border-radius: 6px; outline: none; font-size: 13px; }
-    .add-bar button { background: #10b981; color: white; border: none; padding: 6px 14px; border-radius: 6px; font-weight: bold; font-size: 13px; }
   </style>
 </head>
-<body>
+<body class="bg-slate-100 min-h-screen font-sans text-slate-800 flex flex-col items-center pb-8">
 
-  <header>
-    <h1>家务打卡助手</h1>
+  <!-- Header -->
+  <header class="w-full max-w-md bg-indigo-600 text-white p-4 shadow-md sticky top-0 z-30 flex justify-between items-center">
+    <div class="flex items-center space-x-2">
+      <i class="fa-solid fa-boxes-packing text-2xl"></i>
+      <h1 class="text-xl font-bold tracking-wide">寻物小助手</h1>
+    </div>
+    <button id="exportBtn" class="bg-indigo-700 hover:bg-indigo-800 text-white text-xs px-3 py-2 rounded-lg flex items-center gap-1.5 transition active:scale-95 shadow">
+      <i class="fa-solid fa-file-excel text-emerald-400 text-sm"></i>
+      <span>导出 Excel</span>
+    </button>
   </header>
 
-  <div class="nav">
-    <button id="btn-today" class="active" onclick="switchView('today')">今日打卡</button>
-    <button id="btn-week" onclick="switchView('week')">周视图</button>
-    <button id="btn-month" onclick="switchView('month')">月视图</button>
-  </div>
+  <main class="w-full max-w-md p-4 flex-1 flex flex-col gap-4">
 
-  <div class="container">
-    <!-- 快速打卡视图 -->
-    <div id="view-today">
-      <div class="add-bar">
-        <input type="text" id="new-task-input" placeholder="添加新家务...">
-        <button onclick="addTask()">添加</button>
-      </div>
-      <div id="today-list"></div>
-    </div>
-
-    <!-- 周视图 -->
-    <div id="view-week" style="display: none;">
-      <div class="calendar-grid">
-        <div class="grid-header">
-          <div>家务</div><div>一</div><div>二</div><div>三</div><div>四</div><div>五</div><div>六</div><div>日</div>
+    <!-- Add Item Form Card -->
+    <section class="bg-white rounded-2xl p-4 shadow-sm border border-slate-200">
+      <h2 class="text-sm font-semibold text-slate-500 mb-3 flex items-center gap-1.5">
+        <i class="fa-solid fa-plus-circle text-indigo-500"></i> 新增存放记录
+      </h2>
+      <form id="itemForm" class="flex flex-col gap-3">
+        <div>
+          <label class="block text-xs text-slate-500 mb-1" for="itemName">物品名称 <span class="text-rose-500">*</span></label>
+          <input type="text" id="itemName" required placeholder="例如：备用钥匙、老花镜" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white text-sm transition">
         </div>
-        <div id="week-rows"></div>
-      </div>
-    </div>
 
-    <!-- 月视图 -->
-    <div id="view-month" style="display: none;">
-      <div class="calendar-grid">
-        <div class="month-grid" id="month-days"></div>
+        <div>
+          <label class="block text-xs text-slate-500 mb-1" for="itemLocation">存放位置 <span class="text-rose-500">*</span></label>
+          <input type="text" id="itemLocation" required placeholder="例如：车库铁柜第二个抽屉" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white text-sm transition">
+        </div>
+
+        <div>
+          <label class="block text-xs text-slate-500 mb-1" for="itemDate">存放/记录日期 <span class="text-rose-500">*</span></label>
+          <input type="date" id="itemDate" required class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white text-sm transition">
+        </div>
+
+        <button type="submit" class="w-full mt-1 bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2.5 rounded-xl text-sm transition active:scale-[0.98] shadow-sm flex justify-center items-center gap-2">
+          <i class="fa-solid fa-check"></i>
+          <span>保存记录</span>
+        </button>
+      </form>
+    </section>
+
+    <!-- Search Card -->
+    <section class="bg-white rounded-2xl p-3 shadow-sm border border-slate-200">
+      <div class="relative flex items-center">
+        <i class="fa-solid fa-magnifying-glass absolute left-3.5 text-slate-400 text-sm"></i>
+        <input type="text" id="searchInput" placeholder="搜索物品名称或位置..." class="w-full pl-9 pr-8 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white transition">
+        <button id="clearSearch" class="hidden absolute right-3 text-slate-400 hover:text-slate-600">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
       </div>
-    </div>
+    </section>
+
+    <!-- Items List Section -->
+    <section class="flex-1 flex flex-col">
+      <div class="flex justify-between items-center mb-2 px-1">
+        <span class="text-xs font-semibold text-slate-500">全部物品 (<span id="totalCount">0</span>)</span>
+        <span id="searchResultNotice" class="text-xs text-indigo-600 hidden">搜索结果</span>
+      </div>
+
+      <div id="itemList" class="flex flex-col gap-3">
+        <!-- List Items will be injected here dynamically -->
+      </div>
+
+      <!-- Empty State -->
+      <div id="emptyState" class="hidden flex-col items-center justify-center py-12 text-slate-400">
+        <i class="fa-solid fa-box-open text-5xl mb-3 text-slate-300"></i>
+        <p class="text-sm font-medium" id="emptyText">暂无存放物品，快去添加吧！</p>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Notification Toast -->
+  <div id="toast" class="fixed bottom-6 left-1/2 -translate-x-1/2 bg-slate-800 text-white text-xs px-4 py-2.5 rounded-full shadow-lg opacity-0 pointer-events-none transition-opacity duration-300 z-50 flex items-center gap-2">
+    <i id="toastIcon" class="fa-solid fa-circle-check text-emerald-400"></i>
+    <span id="toastMsg">提示内容</span>
   </div>
 
   <script>
-    const DEFAULT_TASKS = ['擦地', '刷洗手间', '洗衣服', '后院剪草', '前院剪草', '浇花'];
-    
-    // 初始化数据结构
-    let store = JSON.parse(localStorage.getItem('housework_data')) || {
-      tasks: DEFAULT_TASKS,
-      notes: {},
-      logs: {}
+    // --- 1. Dynamic Manifest & Service Worker Setup for PWA ---
+    const manifestData = {
+      "name": "寻物小助手",
+      "short_name": "寻物",
+      "start_url": "./",
+      "display": "standalone",
+      "background_color": "#f1f5f9",
+      "theme_color": "#4f46e5",
+      "icons": [
+        {
+          "src": "https://cdn-icons-png.flaticon.com/512/833/833300.png",
+          "sizes": "512x512",
+          "type": "image/png"
+        }
+      ]
     };
-
-    if (!store.notes) store.notes = {};
-
-    function saveData() {
-      localStorage.setItem('housework_data', JSON.stringify(store));
-    }
-
-    function getTodayStr() {
-      return new Date().toISOString().split('T')[0];
-    }
-
-    function switchView(view) {
-      document.querySelectorAll('.nav button').forEach(b => b.classList.remove('active'));
-      document.getElementById(`btn-${view}`).classList.add('active');
-      
-      document.getElementById('view-today').style.display = view === 'today' ? 'block' : 'none';
-      document.getElementById('view-week').style.display = view === 'week' ? 'block' : 'none';
-      document.getElementById('view-month').style.display = view === 'month' ? 'block' : 'none';
-
-      if (view === 'today') renderToday();
-      if (view === 'week') renderWeek();
-      if (view === 'month') renderMonth();
-    }
-
-    function getLastDoneDays(task) {
-      const dates = Object.keys(store.logs).filter(d => store.logs[d].includes(task)).sort().reverse();
-      if (dates.length === 0) return null;
-      const diffTime = Math.abs(new Date(getTodayStr()) - new Date(dates[0]));
-      return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-    }
-
-    function toggleCheck(task) {
-      const today = getTodayStr();
-      if (!store.logs[today]) store.logs[today] = [];
-      
-      const idx = store.logs[today].indexOf(task);
-      if (idx > -1) {
-        store.logs[today].splice(idx, 1);
-      } else {
-        store.logs[today].push(task);
-      }
-      saveData();
-      renderToday();
-    }
-
-    // 设置/修改备注 (限3个字)
-    function editNote(taskName) {
-      const currentNote = store.notes[taskName] || '';
-      let newNote = prompt(`为“${taskName}”设置备注（最多3个字，留空清除）：`, currentNote);
-      
-      if (newNote !== null) {
-        newNote = newNote.trim().substring(0, 3);
-        if (newNote) {
-          store.notes[taskName] = newNote;
-        } else {
-          delete store.notes[taskName];
-        }
-        saveData();
-        renderToday();
-      }
-    }
-
-    function editTask(oldName) {
-      const newName = prompt('修改家务名称：', oldName);
-      if (newName && newName.trim() !== '' && newName.trim() !== oldName) {
-        const cleanName = newName.trim();
-        if (store.tasks.includes(cleanName)) {
-          alert('该家务名称已存在！');
-          return;
-        }
-
-        const index = store.tasks.indexOf(oldName);
-        if (index > -1) {
-          store.tasks[index] = cleanName;
-        }
-
-        if (store.notes[oldName]) {
-          store.notes[cleanName] = store.notes[oldName];
-          delete store.notes[oldName];
-        }
-
-        Object.keys(store.logs).forEach(date => {
-          store.logs[date] = store.logs[date].map(t => t === oldName ? cleanName : t);
-        });
-
-        saveData();
-        renderToday();
-      }
-    }
-
-    function deleteTask(taskName) {
-      if (confirm(`确定要删除家务“${taskName}”吗？`)) {
-        store.tasks = store.tasks.filter(t => t !== taskName);
-        delete store.notes[taskName];
-        saveData();
-        renderToday();
-      }
-    }
-
-    // 渲染今日视图
-    function renderToday() {
-      const container = document.getElementById('today-list');
-      const today = getTodayStr();
-      const todayLogs = store.logs[today] || [];
-
-      container.innerHTML = store.tasks.map((task, index) => {
-        const isDoneToday = todayLogs.includes(task);
-        const daysAgo = getLastDoneDays(task);
-        const note = store.notes[task];
-        
-        let warningText = '';
-        if (!isDoneToday && daysAgo !== null && daysAgo >= 10) {
-          warningText = `距上次已过 ${daysAgo} 天`;
-        }
-
-        return `
-          <div class="card" data-index="${index}" data-task="${task}">
-            <div class="task-main">
-              <span class="drag-handle">☰</span>
-              <div class="task-info">
-                <h3>${task}</h3>
-                ${(note || warningText) ? `
-                  <div class="sub-info">
-                    ${note ? `<span class="task-note-badge">${note}</span>` : ''}
-                    ${warningText ? `<span class="status warning">${warningText}</span>` : ''}
-                  </div>
-                ` : ''}
-              </div>
-            </div>
-            <div class="actions">
-              <button class="btn-icon" title="设置备注" onclick="event.stopPropagation(); editNote('${task}')">🏷️</button>
-              <button class="btn-icon" title="修改名称" onclick="event.stopPropagation(); editTask('${task}')">✏️</button>
-              <button class="btn-icon" title="删除" onclick="event.stopPropagation(); deleteTask('${task}')">🗑️</button>
-              <button class="btn-check" style="${isDoneToday ? 'background:#10b981' : ''}" onclick="event.stopPropagation(); toggleCheck('${task}')">
-                ${isDoneToday ? '已完成 ✓' : '打卡'}
-              </button>
-            </div>
-          </div>
-        `;
-      }).join('');
-
-      initDragAndDrop();
-    }
-
-    // 拖拽手柄逻辑
-    function initDragAndDrop() {
-      const container = document.getElementById('today-list');
-      const cards = container.querySelectorAll('.card');
-      let draggedCard = null;
-
-      cards.forEach(card => {
-        const handle = card.querySelector('.drag-handle');
-
-        handle.addEventListener('mousedown', () => {
-          card.setAttribute('draggable', 'true');
-        });
-        
-        card.addEventListener('dragstart', (e) => {
-          draggedCard = card;
-          setTimeout(() => card.classList.add('dragging'), 0);
-        });
-
-        card.addEventListener('dragend', () => {
-          card.removeAttribute('draggable');
-          card.classList.remove('dragging');
-          updateTaskOrder();
-        });
-
-        handle.addEventListener('touchstart', (e) => {
-          draggedCard = card;
-          card.classList.add('dragging');
-        }, { passive: true });
-
-        handle.addEventListener('touchmove', (e) => {
-          if (!draggedCard) return;
-          const touch = e.touches[0];
-          const target = document.elementFromPoint(touch.clientX, touch.clientY);
-          const targetCard = target ? target.closest('.card') : null;
-
-          if (targetCard && targetCard !== draggedCard) {
-            const rect = targetCard.getBoundingClientRect();
-            const next = (touch.clientY - rect.top) > (rect.height / 2);
-            container.insertBefore(draggedCard, next ? targetCard.nextSibling : targetCard);
-          }
-        }, { passive: true });
-
-        handle.addEventListener('touchend', () => {
-          if (draggedCard) {
-            draggedCard.classList.remove('dragging');
-            draggedCard = null;
-            updateTaskOrder();
-          }
-        });
-      });
-
-      container.addEventListener('dragover', (e) => {
-        e.preventDefault();
-        const afterElement = getDragAfterElement(container, e.clientY);
-        if (afterElement == null) {
-          container.appendChild(draggedCard);
-        } else {
-          container.insertBefore(draggedCard, afterElement);
-        }
-      });
-    }
-
-    function getDragAfterElement(container, y) {
-      const draggableElements = [...container.querySelectorAll('.card:not(.dragging)')];
-      return draggableElements.reduce((closest, child) => {
-        const box = child.getBoundingClientRect();
-        const offset = y - box.top - box.height / 2;
-        if (offset < 0 && offset > closest.offset) {
-          return { offset: offset, element: child };
-        } else {
-          return closest;
-        }
-      }, { offset: Number.NEGATIVE_INFINITY }).element;
-    }
-
-    function updateTaskOrder() {
-      const container = document.getElementById('today-list');
-      const cards = container.querySelectorAll('.card');
-      const newOrder = Array.from(cards).map(card => card.getAttribute('data-task'));
-      
-      store.tasks = newOrder;
-      saveData();
-    }
-
-    function renderWeek() {
-      const container = document.getElementById('week-rows');
-      const curr = new Date();
-      const firstDay = curr.getDate() - curr.getDay() + 1;
-      
-      const weekDates = [];
-      for (let i = 0; i < 7; i++) {
-        const d = new Date(curr.setDate(firstDay + i));
-        weekDates.push(d.toISOString().split('T')[0]);
-      }
-
-      container.innerHTML = store.tasks.map(task => {
-        const note = store.notes[task];
-        const displayName = note ? `${task}(${note})` : task;
-        
-        const dots = weekDates.map(date => {
-          const done = store.logs[date] && store.logs[date].includes(task);
-          return `<div class="dot ${done ? 'done' : ''}"></div>`;
-        }).join('');
-
-        return `
-          <div class="grid-row">
-            <div class="task-name" title="${displayName}">${displayName}</div>
-            ${dots}
-          </div>
-        `;
-      }).join('');
-    }
-
-    // 修改：让月视图每个日期的单元格严格按比例等宽
-    function renderMonth() {
-      const container = document.getElementById('month-days');
-      const now = new Date();
-      const year = now.getFullYear();
-      const month = now.getMonth();
-      
-      const firstDay = new Date(year, month, 1).getDay();
-      const daysInMonth = new Date(year, month + 1, 0).getDate();
-      
-      let html = '';
-      
-      // 1. 生成前面的空白天数格（每一个都是单独的格，确保网格对齐）
-      const emptyCount = (firstDay === 0 ? 6 : firstDay - 1);
-      for (let i = 0; i < emptyCount; i++) {
-        html += `<div class="month-day empty"></div>`;
-      }
-
-      // 2. 渲染真实的日期格
-      for (let day = 1; day <= daysInMonth; day++) {
-        const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-        const logs = store.logs[dateStr] || [];
-        const tags = logs.map(t => {
-          const note = store.notes[t];
-          const text = note ? `${t}(${note})` : t;
-          return `<div class="month-tag" title="${text}">${text}</div>`;
-        }).join('');
-
-        html += `
-          <div class="month-day">
-            <div class="num">${day}</div>
-            ${tags}
-          </div>
-        `;
-      }
-      container.innerHTML = html;
-    }
-
-    function addTask() {
-      const input = document.getElementById('new-task-input');
-      const val = input.value.trim();
-      if (val && !store.tasks.includes(val)) {
-        store.tasks.push(val);
-        saveData();
-        input.value = '';
-        renderToday();
-      }
-    }
+    
+    const manifestBlob = new Blob([JSON.stringify(manifestData)], { type: 'application/json' });
+    document.getElementById('manifest-placeholder').setAttribute('href', URL.createObjectURL(manifestBlob));
 
     if ('serviceWorker' in navigator) {
-      const swCode = `
-        self.addEventListener('install', e => e.waitUntil(self.skipWaiting()));
-        self.addEventListener('fetch', e => e.respondWith(fetch(e.request)));
-      `;
-      const blob = new Blob([swCode], { type: 'application/javascript' });
-      navigator.serviceWorker.register(URL.createObjectURL(blob));
+      window.addEventListener('load', () => {
+        const swCode = `
+          const CACHE_NAME = 'item-tracker-v1';
+          self.addEventListener('install', e => {
+            e.waitUntil(self.skipWaiting());
+          });
+          self.addEventListener('activate', e => {
+            e.waitUntil(self.clients.claim());
+          });
+          self.addEventListener('fetch', e => {
+            e.respondWith(
+              fetch(e.request).catch(() => caches.match(e.request))
+            );
+          });
+        `;
+        const blob = new Blob([swCode], { type: 'text/javascript' });
+        navigator.serviceWorker.register(URL.createObjectURL(blob)).catch(() => {});
+      });
     }
 
-    renderToday();
+    // --- 2. Application Logic ---
+    const STORAGE_KEY = 'my_stored_items_v1';
+    let items = JSON.parse(localStorage.getItem(STORAGE_KEY)) || [];
+
+    // Elements
+    const itemForm = document.getElementById('itemForm');
+    const itemNameInput = document.getElementById('itemName');
+    const itemLocationInput = document.getElementById('itemLocation');
+    const itemDateInput = document.getElementById('itemDate');
+    const searchInput = document.getElementById('searchInput');
+    const clearSearchBtn = document.getElementById('clearSearch');
+    const itemList = document.getElementById('itemList');
+    const emptyState = document.getElementById('emptyState');
+    const emptyText = document.getElementById('emptyText');
+    const totalCount = document.getElementById('totalCount');
+    const exportBtn = document.getElementById('exportBtn');
+    const searchResultNotice = document.getElementById('searchResultNotice');
+
+    // Set today's date as default
+    const setTodayDate = () => {
+      const today = new Date().toISOString().split('T')[0];
+      itemDateInput.value = today;
+    };
+    setTodayDate();
+
+    // Toast Function
+    function showToast(msg, iconClass = 'fa-solid fa-circle-check text-emerald-400') {
+      const toast = document.getElementById('toast');
+      const toastMsg = document.getElementById('toastMsg');
+      const toastIcon = document.getElementById('toastIcon');
+      
+      toastMsg.textContent = msg;
+      toastIcon.className = iconClass;
+      toast.classList.remove('opacity-0', 'pointer-events-none');
+      
+      setTimeout(() => {
+        toast.classList.add('opacity-0', 'pointer-events-none');
+      }, 2000);
+    }
+
+    // Save items to LocalStorage
+    function saveItems() {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
+    }
+
+    // Render Items
+    function renderItems(filterQuery = '') {
+      const query = filterQuery.trim().toLowerCase();
+      const filteredItems = items.filter(item => 
+        item.name.toLowerCase().includes(query) || 
+        item.location.toLowerCase().includes(query)
+      );
+
+      itemList.innerHTML = '';
+      totalCount.textContent = items.length;
+
+      if (query !== '') {
+        searchResultNotice.classList.remove('hidden');
+        clearSearchBtn.classList.remove('hidden');
+      } else {
+        searchResultNotice.classList.add('hidden');
+        clearSearchBtn.classList.add('hidden');
+      }
+
+      if (filteredItems.length === 0) {
+        emptyState.classList.remove('hidden');
+        emptyState.classList.add('flex');
+        if (query !== '') {
+          emptyText.textContent = '没有找到匹配的物品';
+        } else {
+          emptyText.textContent = '暂无存放物品，快去添加吧！';
+        }
+      } else {
+        emptyState.classList.add('hidden');
+        emptyState.classList.remove('flex');
+
+        // Render sorted by date descending
+        filteredItems.sort((a, b) => new Date(b.date) - new Date(a.date));
+
+        filteredItems.forEach(item => {
+          const card = document.createElement('div');
+          card.className = 'bg-white rounded-2xl p-4 shadow-sm border border-slate-200 flex justify-between items-start gap-3 transition hover:shadow-md';
+          
+          card.innerHTML = `
+            <div class="flex-1 min-w-0">
+              <div class="flex items-center gap-2 mb-1">
+                <h3 class="font-bold text-slate-800 text-base truncate">${escapeHtml(item.name)}</h3>
+              </div>
+              <div class="flex items-start gap-1.5 text-indigo-600 text-sm font-medium mb-2">
+                <i class="fa-solid fa-location-dot mt-1 shrink-0 text-xs"></i>
+                <span class="break-all">${escapeHtml(item.location)}</span>
+              </div>
+              <div class="text-xs text-slate-400 flex items-center gap-1">
+                <i class="fa-regular fa-calendar text-[11px]"></i>
+                <span>${item.date}</span>
+              </div>
+            </div>
+            <button onclick="deleteItem('${item.id}')" aria-label="删除物品" class="text-slate-300 hover:text-rose-500 active:text-rose-600 p-2 rounded-xl hover:bg-rose-50 transition shrink-0">
+              <i class="fa-solid fa-trash-can text-lg"></i>
+            </button>
+          `;
+          itemList.appendChild(card);
+        });
+      }
+    }
+
+    // HTML Sanitization
+    function escapeHtml(str) {
+      return str.replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/"/g, "&quot;")
+                .replace(/'/g, "&#039;");
+    }
+
+    // Add Item
+    itemForm.addEventListener('submit', (e) => {
+      e.preventDefault();
+      
+      const newItem = {
+        id: Date.now().toString(),
+        name: itemNameInput.value.trim(),
+        location: itemLocationInput.value.trim(),
+        date: itemDateInput.value
+      };
+
+      items.unshift(newItem);
+      saveItems();
+      
+      // Clear inputs
+      itemNameInput.value = '';
+      itemLocationInput.value = '';
+      setTodayDate();
+      
+      // Clear search if actively searching
+      searchInput.value = '';
+      
+      renderItems();
+      showToast('物品已添加成功！');
+    });
+
+    // Delete Item
+    window.deleteItem = function(id) {
+      if (confirm('确定要删除这件物品记录吗？')) {
+        items = items.filter(item => item.id !== id);
+        saveItems();
+        renderItems(searchInput.value);
+        showToast('物品已成功删除', 'fa-solid fa-trash-can text-rose-400');
+      }
+    };
+
+    // Search input listener
+    searchInput.addEventListener('input', (e) => {
+      renderItems(e.target.value);
+    });
+
+    // Clear search button
+    clearSearchBtn.addEventListener('click', () => {
+      searchInput.value = '';
+      renderItems();
+    });
+
+    // Export to Excel
+    exportBtn.addEventListener('click', () => {
+      if (items.length === 0) {
+        showToast('暂无记录可供导出', 'fa-solid fa-circle-exclamation text-amber-400');
+        return;
+      }
+
+      // Format data for Excel
+      const excelData = items.map((item, index) => ({
+        "序号": index + 1,
+        "物品名称": item.name,
+        "存放位置": item.location,
+        "记录日期": item.date
+      }));
+
+      // Create sheet & workbook using SheetJS
+      const worksheet = XLSX.utils.json_to_sheet(excelData);
+      
+      // Auto adjust column widths
+      worksheet['!cols'] = [
+        { wch: 8 },  // 序号
+        { wch: 20 }, // 物品名称
+        { wch: 30 }, // 存放位置
+        { wch: 15 }  // 记录日期
+      ];
+
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, "物品位置明细");
+
+      // Generate filename with current date
+      const today = new Date().toISOString().split('T')[0];
+      const filename = `物品位置记录清单_${today}.xlsx`;
+
+      // Trigger download
+      XLSX.writeFile(workbook, filename);
+      showToast('Excel 文件导出成功！');
+    });
+
+    // Initial Render
+    renderItems();
   </script>
 </body>
 </html>
